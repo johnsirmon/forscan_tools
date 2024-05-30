@@ -3,6 +3,10 @@ __pycache__/
 *.py[cod]
 *$py.class
 
+# Ignore .abt files directory
+abt/
+
+
 # C extensions
 *.so
 
