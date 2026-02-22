@@ -76,6 +76,15 @@ class TrustReport:
     sources: tuple[SourceEvidence, ...]
 
 
+@dataclass(frozen=True)
+class TopicExplanation:
+    topic: str
+    summary: str
+    why_it_matters: tuple[str, ...]
+    common_mistakes: tuple[str, ...]
+    best_practices: tuple[str, ...]
+
+
 GENERIC_DTC_SYSTEM = {
     "P": "Powertrain",
     "B": "Body",
@@ -206,6 +215,119 @@ OFFICIAL_SOURCES: tuple[SourceEvidence, ...] = (
         notes="Pinned practical guidance for module configuration workflows.",
     ),
 )
+
+
+TOPIC_EXPLANATIONS: dict[str, TopicExplanation] = {
+    "asbuilt": TopicExplanation(
+        topic="As-Built",
+        summary=(
+            "As-Built is factory configuration data for modules. Once you edit values,"
+            " it is no longer factory As-Built."
+        ),
+        why_it_matters=(
+            "Used to restore modules to known factory-state values.",
+            "Critical when replacing modules or recovering from bad edits.",
+            "Many forum spreadsheets and comparisons are based on As-Built lines.",
+        ),
+        common_mistakes=(
+            "Treating As-Built as universal between different trims/years/modules.",
+            "Editing raw hex without a backup and rollback plan.",
+            "Assuming every visible block is safe user configuration data.",
+        ),
+        best_practices=(
+            "Export backup before any write and keep timestamped copies.",
+            "Prefer human-readable Module Configuration over raw As-Built edits.",
+            "Write one change at a time and rescan DTCs after each step.",
+        ),
+    ),
+    "abt": TopicExplanation(
+        topic="ABT Files",
+        summary=(
+            "ABT is FORScan's module configuration backup/export format."
+            " Newer FORScan versions use an updated encoding for large block/line values."
+        ),
+        why_it_matters=(
+            "ABT is your practical restore point before risky changes.",
+            "Compatibility differs between old and new FORScan versions.",
+            "Useful for offline comparison and change audits.",
+        ),
+        common_mistakes=(
+            "Opening old ABT tools against new-encoding ABT content without conversion.",
+            "Confusing Motorcraft .AB files with FORScan .ABT backups.",
+            "Relying on one backup copy only.",
+        ),
+        best_practices=(
+            "Keep both module-level ABT backups and a whole-session export.",
+            "Version your ABT backups by VIN/module/date.",
+            "Verify your restore path before making complex edits.",
+        ),
+    ),
+    "ecc": TopicExplanation(
+        topic="Economized Central Configuration (ECC)",
+        summary=(
+            "ECC stores shared vehicle data used across multiple modules"
+            " (for example VIN/tire size/axle ratio in newer platforms)."
+        ),
+        why_it_matters=(
+            "ECC changes can affect many modules at once.",
+            "Post-change relearn/initialization may be required.",
+            "Missed synchronization can trigger U2100/U2101-style faults.",
+        ),
+        common_mistakes=(
+            "Updating ECC values but skipping module initialization/relearn.",
+            "Assuming only the edited module is impacted.",
+            "Applying values copied from a different platform without validation.",
+        ),
+        best_practices=(
+            "Use official procedure notes for your exact platform and year.",
+            "Run relearn synchronization after ECC writes if applicable.",
+            "Baseline scan before change and compare DTC deltas after.",
+        ),
+    ),
+    "vid": TopicExplanation(
+        topic="PCM VID",
+        summary=(
+            "VID (Vehicle Identification block) contains crucial PCM-related configuration"
+            " and may require checksum-aware/special handling."
+        ),
+        why_it_matters=(
+            "Incorrect VID edits can affect drivability and calibration behavior.",
+            "Some older platforms may need special programming/update flow.",
+            "Adapter capabilities and stable power become even more critical.",
+        ),
+        common_mistakes=(
+            "Treating VID like ordinary As-Built text edits.",
+            "Using low-quality adapters for firmware-related operations.",
+            "Attempting VID work without a fully verified fallback plan.",
+        ),
+        best_practices=(
+            "Use dedicated FORScan VID-related procedures where provided.",
+            "Confirm adapter requirements before attempting changes.",
+            "Do not proceed without power stabilization and complete backups.",
+        ),
+    ),
+    "trid": TopicExplanation(
+        topic="TCM TRID",
+        summary=(
+            "TRID is transmission characterization data and is safety/drivability sensitive."
+        ),
+        why_it_matters=(
+            "Checksum/protection and format constraints can apply.",
+            "Bad changes can cause shifting or transmission behavior issues.",
+            "Dedicated procedures are safer than raw block edits.",
+        ),
+        common_mistakes=(
+            "Editing TRID through generic As-Built workflows.",
+            "Applying copied values without matching hardware/firmware context.",
+            "Skipping post-operation validation drive cycles.",
+        ),
+        best_practices=(
+            "Use FORScan Transmission Characterization Update when applicable.",
+            "Avoid experimentation in this area unless you have a clear recovery path.",
+            "Validate with DTC checks and controlled test drive afterward.",
+        ),
+    ),
+}
 
 
 def list_abt_files(directory: Path) -> list[AbtFileMeta]:
@@ -489,6 +611,37 @@ def trust_report_as_json(report: TrustReport) -> dict[str, object]:
     }
 
 
+def normalize_topic(value: str) -> str:
+    return re.sub(r"[^a-z0-9]", "", value.lower())
+
+
+def list_topics() -> list[str]:
+    return sorted(TOPIC_EXPLANATIONS.keys())
+
+
+def get_topic_explanation(topic: str) -> TopicExplanation:
+    normalized = normalize_topic(topic)
+    found = TOPIC_EXPLANATIONS.get(normalized)
+    if not found:
+        available = ", ".join(list_topics())
+        raise ValueError(f"Unknown topic '{topic}'. Available: {available}")
+    return found
+
+
+def print_topic_explanation(explanation: TopicExplanation) -> None:
+    print(f"Topic: {explanation.topic}")
+    print(f"Summary: {explanation.summary}")
+    print("\nWhy it matters:")
+    for item in explanation.why_it_matters:
+        print(f"- {item}")
+    print("\nCommon mistakes:")
+    for item in explanation.common_mistakes:
+        print(f"- {item}")
+    print("\nBest practices:")
+    for item in explanation.best_practices:
+        print(f"- {item}")
+
+
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
         description="FORScan helper for ABT parsing, Ford DTC interpretation, and safe change planning.",
@@ -499,6 +652,7 @@ def build_parser() -> argparse.ArgumentParser:
               python forscan_tools.py parse-abt --file .\\abt\\sample.abt --out output.csv --jsonl output.jsonl
               python forscan_tools.py decode-dtc --code P0171 --code U0121
               python forscan_tools.py plan-change --module ABS --parameter TireSize --current 235/65R17 --target 245/65R17
+                            python forscan_tools.py explain --topic asbuilt --topic ecc
             """
         ),
     )
@@ -554,6 +708,21 @@ def build_parser() -> argparse.ArgumentParser:
         "--json",
         type=Path,
         help="Optional JSON output path for automation.",
+    )
+
+    explain = subparsers.add_parser(
+        "explain",
+        help="Explain FORScan concepts in plain language (asbuilt, abt, ecc, vid, trid)",
+    )
+    explain.add_argument(
+        "--topic",
+        action="append",
+        help="Topic to explain; repeat flag for multiple topics.",
+    )
+    explain.add_argument(
+        "--list-topics",
+        action="store_true",
+        help="List supported explanation topics.",
     )
 
     return parser
@@ -625,6 +794,29 @@ def main() -> int:
                 encoding="utf-8",
             )
             print(f"JSON output: {args.json}")
+        return 0
+
+    if args.command == "explain":
+        if args.list_topics:
+            print("Supported topics:")
+            for topic in list_topics():
+                print(f"- {topic}")
+            return 0
+
+        if not args.topic:
+            parser.error("explain requires --topic or --list-topics")
+            return 2
+
+        try:
+            explanations = [get_topic_explanation(topic) for topic in args.topic]
+        except ValueError as exc:
+            parser.error(str(exc))
+            return 2
+
+        for idx, explanation in enumerate(explanations):
+            print_topic_explanation(explanation)
+            if idx < len(explanations) - 1:
+                print("\n" + "=" * 72 + "\n")
         return 0
 
     parser.error("Unknown command")

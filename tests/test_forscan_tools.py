@@ -6,7 +6,9 @@ from forscan_tools import (
     SafetyLevel,
     build_trust_report,
     decode_dtc,
+    get_topic_explanation,
     list_abt_files,
+    list_topics,
     parse_abt_bytes,
     plan_change,
     read_abt_file,
@@ -94,3 +96,19 @@ def test_build_trust_report_has_sources_and_score() -> None:
     assert report.legitimacy_score >= 70
     assert "confidence" in report.verdict
     assert len(report.sources) >= 5
+
+
+def test_explain_topics_contains_asbuilt() -> None:
+    assert "asbuilt" in list_topics()
+
+
+def test_get_topic_explanation_asbuilt() -> None:
+    explanation = get_topic_explanation("as-built")
+
+    assert explanation.topic == "As-Built"
+    assert "factory configuration" in explanation.summary.lower()
+
+
+def test_get_topic_explanation_invalid_topic_raises() -> None:
+    with pytest.raises(ValueError, match="Unknown topic"):
+        get_topic_explanation("unknown-topic")
