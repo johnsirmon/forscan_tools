@@ -58,6 +58,24 @@ class ChangePlan:
     warnings: tuple[str, ...]
 
 
+@dataclass(frozen=True)
+class SourceEvidence:
+    title: str
+    url: str
+    category: str
+    last_checked: str
+    notes: str
+
+
+@dataclass(frozen=True)
+class TrustReport:
+    legitimacy_score: int
+    verdict: str
+    strengths: tuple[str, ...]
+    caveats: tuple[str, ...]
+    sources: tuple[SourceEvidence, ...]
+
+
 GENERIC_DTC_SYSTEM = {
     "P": "Powertrain",
     "B": "Body",
@@ -142,6 +160,52 @@ SAFETY_CRITICAL_MODULES = {
     "eps",
     "srs",
 }
+
+
+OFFICIAL_SOURCES: tuple[SourceEvidence, ...] = (
+    SourceEvidence(
+        title="FORScan Home",
+        url="https://forscan.org/home.html",
+        category="official",
+        last_checked="2026-02-21",
+        notes="Core feature, adapter, and platform support statements.",
+    ),
+    SourceEvidence(
+        title="FORScan Products and Release Notes",
+        url="https://forscan.org/download.html",
+        category="official",
+        last_checked="2026-02-21",
+        notes="Current versions and recent release history.",
+    ),
+    SourceEvidence(
+        title="FORScan Documentation Hub",
+        url="https://forscan.org/documentation.html",
+        category="official",
+        last_checked="2026-02-21",
+        notes="Docs entrypoint; notes that v2 docs are in progress.",
+    ),
+    SourceEvidence(
+        title="FORScan HowTo",
+        url="https://forscan.org/howto.html",
+        category="official",
+        last_checked="2026-02-21",
+        notes="Legacy links and redirects to forum-based procedures.",
+    ),
+    SourceEvidence(
+        title="FORScan Supported Modules",
+        url="https://forscan.org/modules_list.html",
+        category="official",
+        last_checked="2026-02-21",
+        notes="Large module abbreviation reference useful for tooling.",
+    ),
+    SourceEvidence(
+        title="FORScan Forum Configuration Guidance",
+        url="https://forscan.org/forum/viewtopic.php?f=16&t=17208",
+        category="official-community",
+        last_checked="2026-02-21",
+        notes="Pinned practical guidance for module configuration workflows.",
+    ),
+)
 
 
 def list_abt_files(directory: Path) -> list[AbtFileMeta]:
@@ -367,6 +431,64 @@ def print_change_plan(plan: ChangePlan) -> None:
         print(f"- {item}")
 
 
+def build_trust_report() -> TrustReport:
+    score = 100
+
+    strengths = [
+        "Primary project website and long-term publication history are available.",
+        "Current release notes show active maintenance (v2.3.70 referenced).",
+        "Support, documentation, and forum channels are clearly linked.",
+    ]
+    caveats = [
+        "Documentation for FORScan v2 is incomplete on static docs pages.",
+        "Some HowTo material has moved to forum posts, so procedures can fragment.",
+        "Vehicle support for newest model years is marked best-effort.",
+    ]
+
+    score -= 10
+    score -= 5
+    score -= 5
+
+    if score >= 85:
+        verdict = "high-confidence with normal technical caution"
+    elif score >= 70:
+        verdict = "moderate-confidence, verify per-vehicle before writes"
+    else:
+        verdict = "low-confidence, do not use without independent validation"
+
+    return TrustReport(
+        legitimacy_score=score,
+        verdict=verdict,
+        strengths=tuple(strengths),
+        caveats=tuple(caveats),
+        sources=OFFICIAL_SOURCES,
+    )
+
+
+def print_trust_report(report: TrustReport) -> None:
+    print(f"Legitimacy score: {report.legitimacy_score}/100")
+    print(f"Verdict: {report.verdict}")
+    print("\nStrengths:")
+    for item in report.strengths:
+        print(f"- {item}")
+    print("\nCaveats:")
+    for item in report.caveats:
+        print(f"- {item}")
+    print("\nSources:")
+    for source in report.sources:
+        print(f"- [{source.category}] {source.title}: {source.url} (checked {source.last_checked})")
+
+
+def trust_report_as_json(report: TrustReport) -> dict[str, object]:
+    return {
+        "legitimacy_score": report.legitimacy_score,
+        "verdict": report.verdict,
+        "strengths": list(report.strengths),
+        "caveats": list(report.caveats),
+        "sources": [source.__dict__ for source in report.sources],
+    }
+
+
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
         description="FORScan helper for ABT parsing, Ford DTC interpretation, and safe change planning.",
@@ -423,6 +545,16 @@ def build_parser() -> argparse.ArgumentParser:
     plan.add_argument("--parameter", required=True, help="Setting/parameter to modify")
     plan.add_argument("--current", required=True, help="Current value")
     plan.add_argument("--target", required=True, help="Target value")
+
+    trust = subparsers.add_parser(
+        "trust-report",
+        help="Show legitimacy/confidence report based on official FORScan sources",
+    )
+    trust.add_argument(
+        "--json",
+        type=Path,
+        help="Optional JSON output path for automation.",
+    )
 
     return parser
 
@@ -482,6 +614,17 @@ def main() -> int:
             target_value=args.target,
         )
         print_change_plan(plan)
+        return 0
+
+    if args.command == "trust-report":
+        report = build_trust_report()
+        print_trust_report(report)
+        if args.json:
+            args.json.write_text(
+                json.dumps(trust_report_as_json(report), indent=2),
+                encoding="utf-8",
+            )
+            print(f"JSON output: {args.json}")
         return 0
 
     parser.error("Unknown command")

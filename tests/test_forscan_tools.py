@@ -4,6 +4,7 @@ import pytest
 
 from forscan_tools import (
     SafetyLevel,
+    build_trust_report,
     decode_dtc,
     list_abt_files,
     parse_abt_bytes,
@@ -85,3 +86,11 @@ def test_plan_change_marks_safety_critical_modules_high() -> None:
 
     assert plan.safety_level is SafetyLevel.HIGH
     assert any("Safety-critical module" in warning for warning in plan.warnings)
+
+
+def test_build_trust_report_has_sources_and_score() -> None:
+    report = build_trust_report()
+
+    assert report.legitimacy_score >= 70
+    assert "confidence" in report.verdict
+    assert len(report.sources) >= 5
