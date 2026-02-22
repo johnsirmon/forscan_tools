@@ -1,6 +1,10 @@
 # FORScan Tools
 
-`forscan_tools` provides modern, scriptable utilities for parsing FORScan `.abt` files and exporting structured outputs for analysis and AI workflows.
+`forscan_tools` provides modern, scriptable utilities for FORScan workflows:
+
+- Parse `.abt` files into structured output
+- Interpret Ford/OBD-II diagnostic trouble codes (DTCs)
+- Generate safe, repeatable checklists before making FORScan changes
 
 ## Highlights
 
@@ -8,6 +12,8 @@
 - CLI-first workflow with optional interactive file selection
 - Structured exports to CSV, JSON, and JSONL
 - JSONL output for easy downstream LLM/RAG ingestion
+- DTC decoding with severity and troubleshooting guidance
+- Safety-first change planning for FORScan module edits
 - Test suite with `pytest`
 - Linting/formatting setup with `ruff`
 
@@ -30,20 +36,37 @@ pip install -e .[dev]
 ### 2) Parse a specific `.abt` file
 
 ```bash
-python forscan_tools.py --file .\\abt\\VIN123_ABS_20250101_010101.abt --out output.csv
+python forscan_tools.py parse-abt --file .\\abt\\VIN123_ABS_20250101_010101.abt --out output.csv
 ```
 
 ### 3) Parse with additional machine-friendly outputs
 
 ```bash
 python forscan_tools.py \
+	parse-abt \
 	--file .\\abt\\VIN123_ABS_20250101_010101.abt \
 	--out output.csv \
 	--json output.json \
 	--jsonl output.jsonl
 ```
 
-### 4) Run tests and lint checks
+### 4) Decode DTCs
+
+```bash
+python forscan_tools.py decode-dtc --code P0171 --code U0121
+```
+
+### 5) Build a safe change checklist before writing in FORScan
+
+```bash
+python forscan_tools.py plan-change \
+	--module ABS \
+	--parameter TireSize \
+	--current 235/65R17 \
+	--target 245/65R17
+```
+
+### 6) Run tests and lint checks
 
 ```bash
 pytest
@@ -53,18 +76,17 @@ ruff format .
 
 ## CLI Options
 
-- `--abt-dir` Directory containing `.abt` files (default: `./abt`)
-- `--file` Direct path to a specific `.abt` file
-- `--out` CSV output path (default: `output_file.csv`)
-- `--json` Optional JSON output path
-- `--jsonl` Optional JSONL output path
+- `parse-abt` Parse `.abt` payloads and export CSV/JSON/JSONL
+- `decode-dtc` Decode one or more DTCs with severity and troubleshooting steps
+- `plan-change` Produce a pre-check + rollback checklist for a planned FORScan edit
 
-If `--file` is omitted, the tool lists files from `--abt-dir` and prompts for selection.
+For `parse-abt`, if `--file` is omitted, the tool lists files from `--abt-dir` and prompts for selection.
 
 ## Notes
 
 - Current parser reads two little-endian unsigned integers from the payload as a safe baseline structure.
 - Extend `parse_abt_bytes(...)` as you map additional FORScan record fields.
+- This tool does not write to a vehicle. It is designed to improve interpretation quality and reduce coding risk before you use FORScan.
 
 ## License
 

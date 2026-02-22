@@ -2,7 +2,15 @@ from pathlib import Path
 
 import pytest
 
-from forscan_tools import list_abt_files, parse_abt_bytes, read_abt_file, write_csv
+from forscan_tools import (
+    SafetyLevel,
+    decode_dtc,
+    list_abt_files,
+    parse_abt_bytes,
+    plan_change,
+    read_abt_file,
+    write_csv,
+)
 
 
 def test_parse_abt_bytes_extracts_two_fields() -> None:
@@ -44,3 +52,36 @@ def test_read_abt_file_and_write_csv(tmp_path: Path) -> None:
     content = output.read_text(encoding="utf-8")
     assert "first_uint32" in content
     assert "second_uint32" in content
+
+
+def test_decode_known_dtc() -> None:
+    decoded = decode_dtc("P0171")
+
+    assert decoded.code == "P0171"
+    assert decoded.system == "Powertrain"
+    assert decoded.severity is SafetyLevel.HIGH
+
+
+def test_decode_unknown_valid_dtc() -> None:
+    decoded = decode_dtc("C1234")
+
+    assert decoded.code == "C1234"
+    assert decoded.title == "Unknown/Unmapped DTC"
+    assert decoded.system == "Chassis"
+
+
+def test_decode_invalid_dtc_raises() -> None:
+    with pytest.raises(ValueError, match="Invalid DTC format"):
+        decode_dtc("NOT-A-DTC")
+
+
+def test_plan_change_marks_safety_critical_modules_high() -> None:
+    plan = plan_change(
+        module="ABS",
+        parameter="TireSize",
+        current_value="235/65R17",
+        target_value="245/65R17",
+    )
+
+    assert plan.safety_level is SafetyLevel.HIGH
+    assert any("Safety-critical module" in warning for warning in plan.warnings)
