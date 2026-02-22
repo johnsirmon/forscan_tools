@@ -14,11 +14,17 @@ authors = [
 ]
 dependencies = []
 
+[project.scripts]
+forscan-tools = "forscan_tools:main"
+
 [project.optional-dependencies]
 dev = [
   "pytest>=8.3",
   "ruff>=0.9"
 ]
+
+[tool.setuptools]
+py-modules = ["forscan_tools"]
 
 [tool.pytest.ini_options]
 pythonpath = ["."]
