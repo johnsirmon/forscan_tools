@@ -53,6 +53,7 @@ coverage.xml
 *.py,cover
 .hypothesis/
 .pytest_cache/
+.ruff_cache/
 cover/
 
 # Translations
@@ -133,6 +134,10 @@ venv/
 ENV/
 env.bak/
 venv.bak/
+
+# Generated parser outputs
+output_file.csv
+*.jsonl
 
 # Spyder project settings
 .spyderproject
