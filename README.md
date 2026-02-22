@@ -96,6 +96,7 @@ For `parse-abt`, if `--file` is omitted, the tool lists files from `--abt-dir` a
 - Extend `parse_abt_bytes(...)` as you map additional FORScan record fields.
 - This tool does not write to a vehicle. It is designed to improve interpretation quality and reduce coding risk before you use FORScan.
 - Research references are tracked in `docs/forscan_research_notes.md`.
+- Forum/Reddit intelligence summary is tracked in `docs/community_intelligence_2026-02-21.md`.
 
 ## License
 
