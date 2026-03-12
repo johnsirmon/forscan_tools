@@ -6,8 +6,8 @@ import json
 import re
 import struct
 import textwrap
-from collections.abc import Iterable
-from dataclasses import dataclass
+from collections.abc import Callable, Iterable
+from dataclasses import asdict, dataclass
 from datetime import datetime
 from enum import StrEnum
 from pathlib import Path
@@ -83,6 +83,14 @@ class TopicExplanation:
     why_it_matters: tuple[str, ...]
     common_mistakes: tuple[str, ...]
     best_practices: tuple[str, ...]
+
+
+ABT_CAPTURED_AT_FORMAT = "%Y%m%d%H%M%S"
+ABT_FIELDS: tuple[tuple[int, str, str], ...] = (
+    (0, "first_uint32", "Primary sample value"),
+    (4, "second_uint32", "Secondary sample value"),
+)
+EXPLANATION_SEPARATOR = "\n" + "=" * 72 + "\n"
 
 
 GENERIC_DTC_SYSTEM = {
@@ -332,32 +340,34 @@ def list_abt_files(directory: Path) -> list[AbtFileMeta]:
     if not directory.exists() or not directory.is_dir():
         return []
 
-    abt_files: list[AbtFileMeta] = []
-    for file_path in directory.glob("*.abt"):
-        parts = file_path.name.split("_")
-        if len(parts) < 4:
-            continue
-
-        vin = parts[0]
-        system = parts[1]
-        date_str = parts[2]
-        time_str = parts[3].split(".")[0]
-
-        try:
-            captured_at = datetime.strptime(date_str + time_str, "%Y%m%d%H%M%S")
-        except ValueError:
-            continue
-
-        abt_files.append(
-            AbtFileMeta(
-                file_name=file_path.name,
-                vin=vin,
-                system=system,
-                captured_at=captured_at,
-            )
-        )
+    abt_files = [
+        meta
+        for file_path in directory.glob("*.abt")
+        if (meta := parse_abt_file_meta(file_path)) is not None
+    ]
 
     return sorted(abt_files, key=lambda item: item.captured_at, reverse=True)
+
+
+def parse_abt_file_meta(file_path: Path) -> AbtFileMeta | None:
+    parts = file_path.name.split("_")
+    if len(parts) < 4:
+        return None
+
+    date_str = parts[2]
+    time_str = parts[3].split(".")[0]
+
+    try:
+        captured_at = datetime.strptime(date_str + time_str, ABT_CAPTURED_AT_FORMAT)
+    except ValueError:
+        return None
+
+    return AbtFileMeta(
+        file_name=file_path.name,
+        vin=parts[0],
+        system=parts[1],
+        captured_at=captured_at,
+    )
 
 
 def prompt_user_to_select_file(abt_files: list[AbtFileMeta]) -> str:
@@ -384,13 +394,8 @@ def parse_abt_bytes(payload: bytes) -> list[ParsedRecord]:
     if len(payload) < 8:
         raise ValueError("ABT payload must contain at least 8 bytes.")
 
-    fields = [
-        (0, "first_uint32", "Primary sample value"),
-        (4, "second_uint32", "Secondary sample value"),
-    ]
-
     records: list[ParsedRecord] = []
-    for offset, name, interpretation in fields:
+    for offset, name, interpretation in ABT_FIELDS:
         value = struct.unpack_from("<I", payload, offset)[0]
         records.append(
             ParsedRecord(
@@ -418,16 +423,19 @@ def write_csv(parsed_data: Iterable[ParsedRecord], csv_file_path: Path) -> None:
 
 
 def write_json(parsed_data: Iterable[ParsedRecord], json_file_path: Path) -> None:
-    serializable = [record.__dict__ for record in parsed_data]
     with json_file_path.open("w", encoding="utf-8") as json_file:
-        json.dump(serializable, json_file, indent=2)
+        json.dump(serialize_records(parsed_data), json_file, indent=2)
 
 
 def write_jsonl(parsed_data: Iterable[ParsedRecord], jsonl_file_path: Path) -> None:
     with jsonl_file_path.open("w", encoding="utf-8") as jsonl_file:
-        for record in parsed_data:
-            jsonl_file.write(json.dumps(record.__dict__))
+        for record in serialize_records(parsed_data):
+            jsonl_file.write(json.dumps(record))
             jsonl_file.write("\n")
+
+
+def serialize_records(parsed_data: Iterable[ParsedRecord]) -> list[dict[str, object]]:
+    return [asdict(record) for record in parsed_data]
 
 
 def normalize_dtc(code: str) -> str:
@@ -520,12 +528,8 @@ def print_dtc_report(entries: list[DtcInfo]) -> None:
         print(f"Title: {entry.title}")
         print(f"System: {entry.system}")
         print(f"Severity: {entry.severity.value}")
-        print("Likely causes:")
-        for item in entry.likely_causes:
-            print(f"- {item}")
-        print("Recommended steps:")
-        for step in entry.recommended_steps:
-            print(f"- {step}")
+        print_bulleted_section("Likely causes", entry.likely_causes)
+        print_bulleted_section("Recommended steps", entry.recommended_steps)
         print()
 
 
@@ -534,18 +538,10 @@ def print_change_plan(plan: ChangePlan) -> None:
     print(f"Parameter: {plan.parameter}")
     print(f"Current -> Target: {plan.current_value} -> {plan.target_value}")
     print(f"Safety level: {plan.safety_level.value}")
-    print("\nPre-checks:")
-    for item in plan.pre_checks:
-        print(f"- {item}")
-    print("\nExecution steps:")
-    for item in plan.execution_steps:
-        print(f"- {item}")
-    print("\nRollback steps:")
-    for item in plan.rollback_steps:
-        print(f"- {item}")
-    print("\nWarnings:")
-    for item in plan.warnings:
-        print(f"- {item}")
+    print_bulleted_section("Pre-checks", plan.pre_checks)
+    print_bulleted_section("Execution steps", plan.execution_steps)
+    print_bulleted_section("Rollback steps", plan.rollback_steps)
+    print_bulleted_section("Warnings", plan.warnings)
 
 
 def build_trust_report() -> TrustReport:
@@ -585,12 +581,8 @@ def build_trust_report() -> TrustReport:
 def print_trust_report(report: TrustReport) -> None:
     print(f"Legitimacy score: {report.legitimacy_score}/100")
     print(f"Verdict: {report.verdict}")
-    print("\nStrengths:")
-    for item in report.strengths:
-        print(f"- {item}")
-    print("\nCaveats:")
-    for item in report.caveats:
-        print(f"- {item}")
+    print_bulleted_section("Strengths", report.strengths)
+    print_bulleted_section("Caveats", report.caveats)
     print("\nSources:")
     for source in report.sources:
         print(f"- [{source.category}] {source.title}: {source.url} (checked {source.last_checked})")
@@ -602,7 +594,7 @@ def trust_report_as_json(report: TrustReport) -> dict[str, object]:
         "verdict": report.verdict,
         "strengths": list(report.strengths),
         "caveats": list(report.caveats),
-        "sources": [source.__dict__ for source in report.sources],
+        "sources": [asdict(source) for source in report.sources],
     }
 
 
@@ -626,14 +618,14 @@ def get_topic_explanation(topic: str) -> TopicExplanation:
 def print_topic_explanation(explanation: TopicExplanation) -> None:
     print(f"Topic: {explanation.topic}")
     print(f"Summary: {explanation.summary}")
-    print("\nWhy it matters:")
-    for item in explanation.why_it_matters:
-        print(f"- {item}")
-    print("\nCommon mistakes:")
-    for item in explanation.common_mistakes:
-        print(f"- {item}")
-    print("\nBest practices:")
-    for item in explanation.best_practices:
+    print_bulleted_section("Why it matters", explanation.why_it_matters)
+    print_bulleted_section("Common mistakes", explanation.common_mistakes)
+    print_bulleted_section("Best practices", explanation.best_practices)
+
+
+def print_bulleted_section(title: str, items: Iterable[str]) -> None:
+    print(f"\n{title}:")
+    for item in items:
         print(f"- {item}")
 
 
@@ -738,87 +730,121 @@ def resolve_abt_file(args: argparse.Namespace) -> Path:
     return args.abt_dir / selected
 
 
+def handle_parse_abt_command(
+    args: argparse.Namespace,
+    parser: argparse.ArgumentParser,
+) -> int:
+    try:
+        abt_file_path = resolve_abt_file(args)
+        parsed_data = read_abt_file(abt_file_path)
+    except (FileNotFoundError, ValueError) as exc:
+        parser.error(str(exc))
+        return 2
+
+    write_csv(parsed_data, args.out)
+    if args.json:
+        write_json(parsed_data, args.json)
+    if args.jsonl:
+        write_jsonl(parsed_data, args.jsonl)
+
+    print(f"Processed {abt_file_path.name}")
+    print(f"CSV output: {args.out}")
+    if args.json:
+        print(f"JSON output: {args.json}")
+    if args.jsonl:
+        print(f"JSONL output: {args.jsonl}")
+    return 0
+
+
+def handle_decode_dtc_command(
+    args: argparse.Namespace,
+    parser: argparse.ArgumentParser,
+) -> int:
+    try:
+        entries = [decode_dtc(code) for code in args.code]
+    except ValueError as exc:
+        parser.error(str(exc))
+        return 2
+
+    print_dtc_report(entries)
+    return 0
+
+
+def handle_plan_change_command(
+    args: argparse.Namespace,
+    parser: argparse.ArgumentParser,
+) -> int:
+    del parser
+    plan = plan_change(
+        module=args.module,
+        parameter=args.parameter,
+        current_value=args.current,
+        target_value=args.target,
+    )
+    print_change_plan(plan)
+    return 0
+
+
+def handle_trust_report_command(
+    args: argparse.Namespace,
+    parser: argparse.ArgumentParser,
+) -> int:
+    del parser
+    report = build_trust_report()
+    print_trust_report(report)
+    if args.json:
+        args.json.write_text(
+            json.dumps(trust_report_as_json(report), indent=2),
+            encoding="utf-8",
+        )
+        print(f"JSON output: {args.json}")
+    return 0
+
+
+def handle_explain_command(
+    args: argparse.Namespace,
+    parser: argparse.ArgumentParser,
+) -> int:
+    if args.list_topics:
+        print("Supported topics:")
+        for topic in list_topics():
+            print(f"- {topic}")
+        return 0
+
+    if not args.topic:
+        parser.error("explain requires --topic or --list-topics")
+        return 2
+
+    try:
+        explanations = [get_topic_explanation(topic) for topic in args.topic]
+    except ValueError as exc:
+        parser.error(str(exc))
+        return 2
+
+    for idx, explanation in enumerate(explanations):
+        print_topic_explanation(explanation)
+        if idx < len(explanations) - 1:
+            print(EXPLANATION_SEPARATOR)
+    return 0
+
+
+COMMAND_HANDLERS: dict[str, Callable[[argparse.Namespace, argparse.ArgumentParser], int]] = {
+    "parse-abt": handle_parse_abt_command,
+    "decode-dtc": handle_decode_dtc_command,
+    "plan-change": handle_plan_change_command,
+    "trust-report": handle_trust_report_command,
+    "explain": handle_explain_command,
+}
+
+
 def main() -> int:
     parser = build_parser()
     args = parser.parse_args()
-
-    if args.command == "parse-abt":
-        try:
-            abt_file_path = resolve_abt_file(args)
-            parsed_data = read_abt_file(abt_file_path)
-        except (FileNotFoundError, ValueError) as exc:
-            parser.error(str(exc))
-            return 2
-
-        write_csv(parsed_data, args.out)
-        if args.json:
-            write_json(parsed_data, args.json)
-        if args.jsonl:
-            write_jsonl(parsed_data, args.jsonl)
-
-        print(f"Processed {abt_file_path.name}")
-        print(f"CSV output: {args.out}")
-        if args.json:
-            print(f"JSON output: {args.json}")
-        if args.jsonl:
-            print(f"JSONL output: {args.jsonl}")
-        return 0
-
-    if args.command == "decode-dtc":
-        try:
-            entries = [decode_dtc(code) for code in args.code]
-        except ValueError as exc:
-            parser.error(str(exc))
-            return 2
-        print_dtc_report(entries)
-        return 0
-
-    if args.command == "plan-change":
-        plan = plan_change(
-            module=args.module,
-            parameter=args.parameter,
-            current_value=args.current,
-            target_value=args.target,
-        )
-        print_change_plan(plan)
-        return 0
-
-    if args.command == "trust-report":
-        report = build_trust_report()
-        print_trust_report(report)
-        if args.json:
-            args.json.write_text(
-                json.dumps(trust_report_as_json(report), indent=2),
-                encoding="utf-8",
-            )
-            print(f"JSON output: {args.json}")
-        return 0
-
-    if args.command == "explain":
-        if args.list_topics:
-            print("Supported topics:")
-            for topic in list_topics():
-                print(f"- {topic}")
-            return 0
-
-        if not args.topic:
-            parser.error("explain requires --topic or --list-topics")
-            return 2
-
-        try:
-            explanations = [get_topic_explanation(topic) for topic in args.topic]
-        except ValueError as exc:
-            parser.error(str(exc))
-            return 2
-
-        for idx, explanation in enumerate(explanations):
-            print_topic_explanation(explanation)
-            if idx < len(explanations) - 1:
-                print("\n" + "=" * 72 + "\n")
-        return 0
-
-    parser.error("Unknown command")
-    return 2
+    handler = COMMAND_HANDLERS.get(args.command)
+    if handler is None:
+        parser.error("Unknown command")
+        return 2
+    return handler(args, parser)
 
 
 if __name__ == "__main__":
