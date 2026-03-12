@@ -6,11 +6,11 @@ import json
 import re
 import struct
 import textwrap
+from collections.abc import Iterable
 from dataclasses import dataclass
 from datetime import datetime
-from enum import Enum
+from enum import StrEnum
 from pathlib import Path
-from typing import Iterable
 
 
 @dataclass(frozen=True)
@@ -29,7 +29,7 @@ class ParsedRecord:
     interpretation: str
 
 
-class SafetyLevel(str, Enum):
+class SafetyLevel(StrEnum):
     LOW = "low"
     MEDIUM = "medium"
     HIGH = "high"
@@ -308,9 +308,7 @@ TOPIC_EXPLANATIONS: dict[str, TopicExplanation] = {
     ),
     "trid": TopicExplanation(
         topic="TCM TRID",
-        summary=(
-            "TRID is transmission characterization data and is safety/drivability sensitive."
-        ),
+        summary=("TRID is transmission characterization data and is safety/drivability sensitive."),
         why_it_matters=(
             "Checksum/protection and format constraints can apply.",
             "Bad changes can cause shifting or transmission behavior issues.",
@@ -416,9 +414,7 @@ def write_csv(parsed_data: Iterable[ParsedRecord], csv_file_path: Path) -> None:
         writer = csv.writer(csv_file)
         writer.writerow(["offset", "name", "value", "interpretation"])
         for record in parsed_data:
-            writer.writerow(
-                [record.offset, record.name, record.value, record.interpretation]
-            )
+            writer.writerow([record.offset, record.name, record.value, record.interpretation])
 
 
 def write_json(parsed_data: Iterable[ParsedRecord], json_file_path: Path) -> None:
@@ -474,9 +470,7 @@ def plan_change(
     target_value: str,
 ) -> ChangePlan:
     module_key = module.strip().lower()
-    safety_level = (
-        SafetyLevel.HIGH if module_key in SAFETY_CRITICAL_MODULES else SafetyLevel.MEDIUM
-    )
+    safety_level = SafetyLevel.HIGH if module_key in SAFETY_CRITICAL_MODULES else SafetyLevel.MEDIUM
 
     pre_checks = (
         "Connect stable battery maintainer before any write",
@@ -503,7 +497,8 @@ def plan_change(
     )
     if safety_level is SafetyLevel.HIGH:
         warnings = warnings + (
-            "Safety-critical module detected: use OEM procedure and do not proceed without backup power.",
+            "Safety-critical module detected: use OEM procedure and do not proceed"
+            " without backup power.",
         )
 
     return ChangePlan(
@@ -644,15 +639,18 @@ def print_topic_explanation(explanation: TopicExplanation) -> None:
 
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
-        description="FORScan helper for ABT parsing, Ford DTC interpretation, and safe change planning.",
+        description=(
+            "FORScan helper for ABT parsing, Ford DTC interpretation, and safe change planning."
+        ),
         formatter_class=argparse.RawDescriptionHelpFormatter,
         epilog=textwrap.dedent(
             """
             Examples:
-              python forscan_tools.py parse-abt --file .\\abt\\sample.abt --out output.csv --jsonl output.jsonl
+              python forscan_tools.py parse-abt --file .\\abt\\sample.abt --out out.csv
               python forscan_tools.py decode-dtc --code P0171 --code U0121
-              python forscan_tools.py plan-change --module ABS --parameter TireSize --current 235/65R17 --target 245/65R17
-                            python forscan_tools.py explain --topic asbuilt --topic ecc
+              python forscan_tools.py plan-change --module ABS --parameter TireSize \\
+                --current 235/65R17 --target 245/65R17
+              python forscan_tools.py explain --topic asbuilt --topic ecc
             """
         ),
     )
