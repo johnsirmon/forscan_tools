@@ -19,7 +19,7 @@ from forscan_core import (
     write_json,
     write_jsonl,
 )
-from forscan_models import ChangePlan, DtcInfo, EXPLANATION_SEPARATOR, TopicExplanation, TrustReport
+from forscan_models import EXPLANATION_SEPARATOR, ChangePlan, DtcInfo, TopicExplanation, TrustReport
 
 
 def print_bulleted_section(title: str, items: Iterable[str]) -> None:

@@ -177,7 +177,11 @@ Supported topics currently include:
 
 ## Project Layout
 
-- `forscan_tools.py`: main CLI and core logic
+- `forscan_tools.py`: backward-compatible public facade and CLI entrypoint
+- `forscan_models.py`: frozen dataclasses, enums, and shared constants
+- `forscan_data.py`: in-repo knowledge tables and curated source data
+- `forscan_core.py`: parsing, lookup, planning, and serialization logic
+- `forscan_cli.py`: argparse wiring, command handlers, and console rendering
 - `tests/test_forscan_tools.py`: unit tests
 - `docs/forscan_research_notes.md`: official-source research synthesis
 - `docs/community_intelligence_2026-02-21.md`: forum/Reddit intelligence brief

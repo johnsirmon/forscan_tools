@@ -170,9 +170,7 @@ def plan_change(
     target_value: str,
 ) -> ChangePlan:
     module_key = module.strip().lower()
-    safety_level = (
-        SafetyLevel.HIGH if module_key in SAFETY_CRITICAL_MODULES else SafetyLevel.MEDIUM
-    )
+    safety_level = SafetyLevel.HIGH if module_key in SAFETY_CRITICAL_MODULES else SafetyLevel.MEDIUM
 
     pre_checks = (
         "Connect stable battery maintainer before any write",

@@ -2,7 +2,6 @@ from __future__ import annotations
 
 from forscan_models import DtcInfo, SafetyLevel, SourceEvidence, TopicExplanation
 
-
 GENERIC_DTC_SYSTEM = {
     "P": "Powertrain",
     "B": "Body",
@@ -226,9 +225,7 @@ TOPIC_EXPLANATIONS: dict[str, TopicExplanation] = {
     ),
     "trid": TopicExplanation(
         topic="TCM TRID",
-        summary=(
-            "TRID is transmission characterization data and is safety/drivability sensitive."
-        ),
+        summary=("TRID is transmission characterization data and is safety/drivability sensitive."),
         why_it_matters=(
             "Checksum/protection and format constraints can apply.",
             "Bad changes can cause shifting or transmission behavior issues.",
